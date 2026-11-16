@@ -14,10 +14,11 @@ import os, json, re, random, hashlib, urllib.request, urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
-TOKEN      = os.environ["TELEGRAM_TOKEN"]
-CHAT_ID    = os.environ["TELEGRAM_CHAT_ID"]
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + GEMINI_KEY
+TOKEN      = os.environ["TELEGRAM_TOKEN"].strip()
+CHAT_ID    = os.environ["TELEGRAM_CHAT_ID"].strip()
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"]
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key=" + GEMINI_KEY
 STATE_FILE = "data/state.json"
 MAX_STORIES = 3
 
@@ -107,11 +108,18 @@ def http_json(url, body=None, timeout=60):
         return json.loads(r.read())
 
 def gemini(text, max_tokens=300):
-    data = http_json(GEMINI_URL, {
-        "contents": [{"parts": [{"text": text}]}],
-        "generationConfig": {"temperature": 0.6, "maxOutputTokens": max_tokens},
-    })
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    last_err = None
+    for model in GEMINI_MODELS:
+        try:
+            data = http_json(GEMINI_BASE.format(model=model), {
+                "contents": [{"parts": [{"text": text}]}],
+                "generationConfig": {"temperature": 0.6, "maxOutputTokens": max_tokens},
+            })
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except Exception as e:
+            last_err = e
+            print(f"Model {model} lỗi: {e}")
+    raise last_err
 
 # ---------- Chọn brand hôm nay ----------
 

@@ -10,7 +10,7 @@ Biến môi trường:
   GEMINI_API_KEY    Key từ Google AI Studio (aistudio.google.com)
 """
 
-import os, json, re, random, hashlib, urllib.request, urllib.parse
+import os, json, re, html, random, hashlib, urllib.request, urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -116,9 +116,13 @@ def gemini(text, max_tokens=300):
                 "generationConfig": {"temperature": 0.6, "maxOutputTokens": max_tokens},
             })
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except Exception as e:
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="replace")[:400]
+            print(f"Model {model} -> HTTP {e.code}: {body}")
             last_err = e
+        except Exception as e:
             print(f"Model {model} lỗi: {e}")
+            last_err = e
     raise last_err
 
 # ---------- Chọn brand hôm nay ----------
@@ -189,6 +193,7 @@ def summarize(brand, country, industry, title, desc):
 # ---------- Telegram ----------
 
 def send_telegram(text):
+    text = html.unescape(text)  # tránh double-escape
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = urllib.parse.urlencode({
         "chat_id": CHAT_ID, "text": text,
@@ -214,7 +219,7 @@ def main():
     news = fetch_news(brand)
     today = datetime.now().strftime("%d/%m/%Y")
 
-    header = f"🌍 <b>Brand hôm nay: {brand}</b> — {country} · {industry}\n📅 {today}"
+    header = f"🌍 <b>Brand hôm nay: {html.escape(brand)}</b> — {html.escape(country)} · {html.escape(industry)}\n📅 {today}"
     if not news:
         send_telegram(header + "\n\nHôm nay brand này không có tin mới trên báo. "
                                 "Ngày mai khám phá brand khác nhé!")
@@ -234,12 +239,12 @@ def main():
         lines.append("Không có tin mới so với lần gửi trước.")
     used_ai = 0
     for i, (h, n) in enumerate(fresh[:MAX_STORIES], 1):
-        title = n["title"].split(" - ")[0]
+        title = html.escape(n["title"].split(" - ")[0])
         block = f"<b>{i}. {title}</b>\n"
         if GEMINI_KEY:
             try:
                 s = summarize(brand, country, industry, n["title"], n["desc"])
-                block += f'📝 {s["tom_tat"]}\n💡 <i>Bài học: {s["bai_hoc"]}</i>\n'
+                block += f'📝 {html.escape(s["tom_tat"])}\n💡 <i>Bài học: {html.escape(s["bai_hoc"])}</i>\n'
                 used_ai += 1
             except Exception as e:
                 print(f"Tóm tắt lỗi, gửi bản thường: {e}")
